@@ -19,4 +19,12 @@ class Rate(models.Model):
     rate = models.FloatField(blank=False)
 
 
+class ConverterResponse(models.Model):
 
+    base = models.CharField(max_length=3, choices=CURRENCY_CHOICES, blank=False)
+    target = models.CharField(max_length=3, choices=CURRENCY_CHOICES, blank=False)
+    amount = models.FloatField(blank=False)
+    result = models.FloatField(blank=False)
+
+    class Meta:
+        managed = False

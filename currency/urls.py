@@ -1,7 +1,6 @@
 from django.conf.urls import url, include
 from currency import views
 from rest_framework.routers import DefaultRouter
-from rest_framework.schemas import get_schema_view
 
 router = DefaultRouter()
 router.register(r'currency', views.CurrencyViewSet)
@@ -11,4 +10,6 @@ router.register(r'rate', views.RateViewSet)
 # Additionally, we include the login URLs for the browsable API.
 urlpatterns = [
     url(r'^', include(router.urls)),
+    url(r'^currency/convert/(?P<base>.+)/(?P<target>.+)/(?P<amount>.+)/&?', views.ConvertCurrency.as_view(),
+        name='currency-convert')
 ]
