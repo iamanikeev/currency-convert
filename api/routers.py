@@ -3,7 +3,7 @@ from rest_framework.routers import Route, DefaultRouter, DynamicDetailRoute
 
 class CurrencyRouter(DefaultRouter):
     """
-    Basic SimpleRouter, added with custom route for currency conversions
+    Basic SimpleRouter, added with custom route for api conversions
     """
     # def __init__(self, *args, **kwargs):
     #     self.trailing_slash = True

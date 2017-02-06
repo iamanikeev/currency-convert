@@ -1,5 +1,5 @@
 from django.conf.urls import url, include
-from currency import views
+from api import views
 from rest_framework.routers import DefaultRouter
 
 router = DefaultRouter()

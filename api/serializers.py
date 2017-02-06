@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from currency.models import Currency, CURRENCY_CHOICES, Rate, ConverterResponse
+
+from api.models import Currency, Rate, ConverterResponse
 
 
 class RatesSerializer(serializers.ModelSerializer):
