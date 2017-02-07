@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation
 from django.http import Http404
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.generics import RetrieveAPIView
@@ -60,14 +61,14 @@ class ConvertCurrency(RetrieveAPIView):
             return Response(status=HTTP_400_BAD_REQUEST, exception="Same currency is given as source and target")
 
         try:
-            float(amount)
-        except ValueError:
+            amount = Decimal(amount)
+        except InvalidOperation:
             return Response(status=HTTP_400_BAD_REQUEST, exception="Amount must be float or integer")
 
         try:
             for rate in self.get_serializer(self.get_object()).data['rates']:
                 if rate['code'] == target:
-                    result = rate['rate'] * float(amount)
+                    result = Decimal(rate['rate']) * amount
                     serializer = ConverterResponseSerializer(
                         ConverterResponse(base=base, target=target, amount=amount, result=result))
                     return Response(serializer.data, status=HTTP_200_OK)

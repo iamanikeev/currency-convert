@@ -1,8 +1,6 @@
-import urllib.request
-
 from datetime import datetime
-from rest_framework.parsers import JSONParser
-
+from decimal import Decimal
+import requests
 from api.models import CURRENCY_CHOICES, Currency, Rate
 
 EXCHANGE_RATES_API = 'https://openexchangerates.org/api/latest.json'
@@ -11,16 +9,15 @@ UPDATE_INTERVAL = 60 * 60 * 24
 
 
 def get_rates_from_openexchange():
-    with urllib.request.urlopen('{}?app_id={}'.format(EXCHANGE_RATES_API, APP_ID)) as response:
-        response_parsed = JSONParser().parse(response)
-        rates_filtered = {}
-        # Get rate for all currencies that we support, except USD, because it is always a base one
-        for code in (v[0] for v in CURRENCY_CHOICES[1:]):
-            if code in response_parsed['rates']:
-                rates_filtered[code] = response_parsed['rates'][code]
-            else:
-                raise KeyError("Invalid api code was specified in api.models.CURRENCY_CHOICES: {}"
-                               .format(code))
+    response = requests.get(EXCHANGE_RATES_API, params={'app_id': APP_ID}).json()
+    rates_filtered = {}
+    # Get rate for all currencies that we support, except USD, because it is always a base one
+    for code in (v[0] for v in CURRENCY_CHOICES[1:]):
+        if code in response['rates']:
+            rates_filtered[code] = response['rates'][code]
+        else:
+            raise KeyError("Invalid currency code was specified in api.models.CURRENCY_CHOICES: {}"
+                           .format(code))
     return rates_filtered
 
 
@@ -32,16 +29,16 @@ def build_currency_rates(queryset):
     usd.save()
 
     for code, rate_to_usd in rates.items():
-        rate_to_usd = float(rate_to_usd)
+        rate_to_usd = Decimal(rate_to_usd)
         # Add corresponding rates for USD
         Rate(base=usd, code=code, rate=rate_to_usd).save()
 
         # Add each of allowed currencies and populate its rates
         curr = Currency(base=code, created_timestamp=now)
         curr.save()
-        Rate(base=curr, code='USD', rate=1.0 / rate_to_usd).save()
+        Rate(base=curr, code='USD', rate=Decimal(1) / rate_to_usd).save()
         for curr_code, rate_to_curr in (_ for _ in rates.items() if _[0] != code):
-            Rate(base=curr, code=curr_code, rate=1.0 / rate_to_usd * float(rate_to_curr)).save()
+            Rate(base=curr, code=curr_code, rate=Decimal(1) / rate_to_usd * Decimal(rate_to_curr)).save()
     return queryset.all()
 
 

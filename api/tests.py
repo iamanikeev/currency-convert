@@ -1,12 +1,13 @@
 import time
 from unittest.mock import patch
 
+from decimal import Decimal, getcontext
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase, APIRequestFactory
 
-from api.models import Currency, CURRENCY_CHOICES, Rate
-from api.views import CurrencyViewSet, ConvertCurrency
+from api.models import CURRENCY_CHOICES
+from api.views import ConvertCurrency
 
 """
 List of tests:
@@ -33,18 +34,13 @@ def _get_fake_oe_response():
 
 
 class GenerationTests(APITestCase):
-
     SUPPORTED_CURRENCIES = [v[0] for v in CURRENCY_CHOICES]
     CURRENCY_LIST = reverse('currency-list')
     BASE = 'USD'
 
-    @staticmethod
-    def _get_currency_convert_url(base, target, amount):
-        return reverse('currency-convert',
-                       kwargs={'base': base, 'target': target, 'amount': amount})
-
     def setUp(self):
         self.SUPPORTED_CURRENCIES.sort()
+        getcontext().prec = 12
 
     def test_oe_rates_generation(self):
         """
@@ -77,10 +73,11 @@ class GenerationTests(APITestCase):
         """
         Fake response from openexchange and make sure that currency conversion works as expected
         """
-        self.assertEqual(self.client.get(self._get_currency_convert_url('CZK', 'USD', 10)).data['result'], 1)
-        self.assertEqual(self.client.get(self._get_currency_convert_url('PLN', 'USD', 100)).data['result'], 1)
-        self.assertEqual(self.client.get(self._get_currency_convert_url('EUR', 'USD', 1000)).data['result'], 1)
-        self.assertEqual(self.client.get(self._get_currency_convert_url('PLN', 'EUR', 10)).data['result'], 100)
+        one = Decimal(1)
+        self.assertEqual(self._get_decimal_response('CZK', 'USD', 10), one)
+        self.assertEqual(self._get_decimal_response('PLN', 'USD', 100), one)
+        self.assertEqual(self._get_decimal_response('EUR', 'USD', 1000), one)
+        self.assertEqual(self._get_decimal_response('PLN', 'EUR', 10), Decimal(100))
 
     def test_conversion(self):
         """
@@ -89,10 +86,10 @@ class GenerationTests(APITestCase):
         """
         rates = self.client.get(self.CURRENCY_LIST).data
         for rate in rates[0]['rates']:
-            self.assertEqual(self.client.get(self._get_currency_convert_url('USD', rate['code'], 10)).data['result'],
-                             10*rate['rate'])
-            self.assertEqual(self.client.get(self._get_currency_convert_url(rate['code'], 'USD', 10)).data['result'],
-                             1/rate['rate']*10)
+            self.assertEqual(self._get_decimal_response('USD', rate['code'], 10),
+                             Decimal(10) * Decimal(rate['rate']))
+            self.assertEqual(self._get_decimal_response(rate['code'], 'USD', 10),
+                             Decimal(1) / Decimal(rate['rate']) * Decimal(10))
 
     def test_exceptions(self):
         """
@@ -101,14 +98,23 @@ class GenerationTests(APITestCase):
         """
         factory = APIRequestFactory()
         view = ConvertCurrency.as_view()
-        request = factory.get(self._get_currency_convert_url('USD', 'PLN', 10))
+        amount = 10
+        request = factory.get(self._get_currency_convert_url('USD', 'PLN', amount))
         self.assertEqual(view(request, base='USD').status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(view(request, base='USD', target='PLN').exception, "Required argument is missing: 'amount'")
-        self.assertEqual(view(request, base='USD', target='USD', amount=10).exception,
+        self.assertEqual(view(request, base='USD', target='USD', amount=amount).exception,
                          "Same currency is given as source and target")
         self.assertEqual(view(request, base='USD', target='EUR', amount='text').exception,
                          "Amount must be float or integer")
-        self.assertEqual(view(request, base='DSS', target='USD', amount=10).exception,
+        self.assertEqual(view(request, base='DSS', target='USD', amount=amount).exception,
                          "Could not find corresponding currency rate. Please check 'base' parameter")
-        self.assertEqual(view(request, base='USD', target='DSS', amount=10).exception,
+        self.assertEqual(view(request, base='USD', target='DSS', amount=amount).exception,
                          "Could not find corresponding currency rate. Please check 'target' parameter")
+
+    @staticmethod
+    def _get_currency_convert_url(base, target, amount):
+        return reverse('currency-convert',
+                       kwargs={'base': base, 'target': target, 'amount': amount})
+
+    def _get_decimal_response(self, base, target, amount):
+        return Decimal(self.client.get(self._get_currency_convert_url(base, target, amount)).data['result'])
