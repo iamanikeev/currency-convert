@@ -1,13 +1,13 @@
+from django.http import Http404
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.generics import RetrieveAPIView
-from rest_framework.status import HTTP_200_OK
+from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from rest_framework.response import Response
 from api.serializers import CurrencySerializer, RatesSerializer, ConverterResponseSerializer
 from api.models import Currency, ConverterResponse, Rate
 from api.util import update_queryset
 
 
-# TODO: add some exception handling
 class CurrencyViewSet(ReadOnlyModelViewSet):
     """
     Get currencies list and detailed information on particular currency
@@ -49,14 +49,30 @@ class ConvertCurrency(RetrieveAPIView):
         return update_queryset(queryset)
 
     def get(self, request, *args, **kwargs):
-        print(kwargs)
-        base = kwargs['base']
-        target = kwargs['target']
-        amount = kwargs['amount']
-        for rate in self.get_serializer(self.get_object()).data['rates']:
-            if rate['code'] == target:
-                result = rate['rate'] * float(amount)
-                serializer = ConverterResponseSerializer(
-                    ConverterResponse(base=base, target=target, amount=amount, result=result))
-                return Response(serializer.data, status=HTTP_200_OK)
+        try:
+            base = kwargs['base']
+            target = kwargs['target']
+            amount = kwargs['amount']
+        except KeyError as ke:
+            return Response(status=HTTP_400_BAD_REQUEST, exception="Required argument is missing: {}".format(ke))
 
+        if base == target:
+            return Response(status=HTTP_400_BAD_REQUEST, exception="Same currency is given as source and target")
+
+        try:
+            float(amount)
+        except ValueError:
+            return Response(status=HTTP_400_BAD_REQUEST, exception="Amount must be float or integer")
+
+        try:
+            for rate in self.get_serializer(self.get_object()).data['rates']:
+                if rate['code'] == target:
+                    result = rate['rate'] * float(amount)
+                    serializer = ConverterResponseSerializer(
+                        ConverterResponse(base=base, target=target, amount=amount, result=result))
+                    return Response(serializer.data, status=HTTP_200_OK)
+        except Http404:
+            return Response(status=HTTP_400_BAD_REQUEST,
+                            exception="Could not find corresponding currency rate. Please check 'base' parameter")
+        return Response(status=HTTP_400_BAD_REQUEST,
+                        exception="Could not find corresponding currency rate. Please check 'target' parameter")

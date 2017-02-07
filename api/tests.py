@@ -15,8 +15,9 @@ List of tests:
     3. Conversion - with fake rates models, having integer rates fold to ten, make sure that rates are generated
     correctly (in case of simple rates, result is predictable and observable)
     4. Conversion - test validity by dividing resulting amount on a rate for corresponding currency
-    5. Negative scenarios for currency - test that 404 is returned for non-existent currencies
-    6. Negative scenarios for conversion - test that ValidationError is returned for incorrectly set parameters
+    5. Negative scenarios for currency conversion
+        - test that 404 is returned for non-existent currencies
+        - test that HTTP_400_BAD_REQUEST is returned for incorrectly set parameters
         - non-existent source/target currency
         - amount is mixed with currency specification in route
         - amount is a non-digit
@@ -24,16 +25,11 @@ List of tests:
 
 
 def _get_fake_oe_response():
-    rates = {
-        'timestamp': 0000000,
-        'base': 'USD',
-        'rates': {}
+    return {
+        'CZK': 10.0,
+        'PLN': 100.0,
+        'EUR': 1000.0
     }
-    rate = 10
-    for curr in CURRENCY_CHOICES[1:]:
-        rates[curr] = rate
-        rate *= 10
-    return rates
 
 
 class GenerationTests(APITestCase):
@@ -56,35 +52,63 @@ class GenerationTests(APITestCase):
         Check that generated rates have all supported bases
         :return:
         """
-        print('test 1')
         response = self.client.get(self.CURRENCY_LIST)
-        fetched_currencies = [_['base'].split('/')[-2] for _ in response.data]
+        fetched_currencies = [_['base'].split('/')[-2] for _ in response.data]  # extract currency code from detail URL
         fetched_currencies.sort()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(self.SUPPORTED_CURRENCIES), len(response.data))
         self.assertEqual(fetched_currencies, self.SUPPORTED_CURRENCIES)
-        print('test 1 passed')
 
     @patch('api.util.UPDATE_INTERVAL', new=1)
     def test_rates_update(self):
-        print('test 2')
-        view = CurrencyViewSet.as_view({'get': 'list'})
-        request = APIRequestFactory().get(self.CURRENCY_LIST)
-        first_timestamp = view(request).data[0]['created_timestamp']
+        """
+        Set update interval to one second, and make sure that currency rates update in time
+        :return:
+        """
+        first_timestamp = self.client.get(self.CURRENCY_LIST).data[0]['created_timestamp']
         # Check that currencies have the same timestamp
-        self.assertEqual(first_timestamp, view(request).data[0]['created_timestamp'])
+        self.assertEqual(first_timestamp, self.client.get(self.CURRENCY_LIST).data[0]['created_timestamp'])
         time.sleep(2)
         # Check that timestamp changed after update interval has passed
-        self.assertLess(first_timestamp, view(request).data[0]['created_timestamp'])
-        print('test 2 passed')
+        self.assertLess(first_timestamp, self.client.get(self.CURRENCY_LIST).data[0]['created_timestamp'])
 
     @patch('api.util.get_rates_from_openexchange', new=_get_fake_oe_response)
     def test_rates_generation_validity(self):
-        print('test 3')
+        """
+        Fake response from openexchange and make sure that currency conversion works as expected
+        """
+        self.assertEqual(self.client.get(self._get_currency_convert_url('CZK', 'USD', 10)).data['result'], 1)
+        self.assertEqual(self.client.get(self._get_currency_convert_url('PLN', 'USD', 100)).data['result'], 1)
+        self.assertEqual(self.client.get(self._get_currency_convert_url('EUR', 'USD', 1000)).data['result'], 1)
+        self.assertEqual(self.client.get(self._get_currency_convert_url('PLN', 'EUR', 10)).data['result'], 100)
+
+    def test_conversion(self):
+        """
+        Make sure that conversion result equals rate multiplied by amount
+        :return:
+        """
+        rates = self.client.get(self.CURRENCY_LIST).data
+        for rate in rates[0]['rates']:
+            self.assertEqual(self.client.get(self._get_currency_convert_url('USD', rate['code'], 10)).data['result'],
+                             10*rate['rate'])
+            self.assertEqual(self.client.get(self._get_currency_convert_url(rate['code'], 'USD', 10)).data['result'],
+                             1/rate['rate']*10)
+
+    def test_exceptions(self):
+        """
+        Test various ways of incorrect calls to convert API
+        :return:
+        """
+        factory = APIRequestFactory()
         view = ConvertCurrency.as_view()
-        url = self._get_currency_convert_url('USD', 'CZK', 1.0)
-        print(url)
-        response = self.client.get(url)
-        print(response.data)
-
-
+        request = factory.get(self._get_currency_convert_url('USD', 'PLN', 10))
+        self.assertEqual(view(request, base='USD').status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(view(request, base='USD', target='PLN').exception, "Required argument is missing: 'amount'")
+        self.assertEqual(view(request, base='USD', target='USD', amount=10).exception,
+                         "Same currency is given as source and target")
+        self.assertEqual(view(request, base='USD', target='EUR', amount='text').exception,
+                         "Amount must be float or integer")
+        self.assertEqual(view(request, base='DSS', target='USD', amount=10).exception,
+                         "Could not find corresponding currency rate. Please check 'base' parameter")
+        self.assertEqual(view(request, base='USD', target='DSS', amount=10).exception,
+                         "Could not find corresponding currency rate. Please check 'target' parameter")
