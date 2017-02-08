@@ -12,7 +12,6 @@ class RatesSerializer(serializers.ModelSerializer):
 class CurrencySerializer(serializers.ModelSerializer):
 
     rates = RatesSerializer(many=True)
-    base = serializers.HyperlinkedRelatedField(view_name='currency-detail', read_only=True)
 
     class Meta:
         model = Currency

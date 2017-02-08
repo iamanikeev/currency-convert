@@ -40,7 +40,7 @@ class GenerationTests(APITestCase):
 
     def setUp(self):
         self.SUPPORTED_CURRENCIES.sort()
-        getcontext().prec = 12
+        getcontext().prec = 11
 
     def test_oe_rates_generation(self):
         """
@@ -49,7 +49,7 @@ class GenerationTests(APITestCase):
         :return:
         """
         response = self.client.get(self.CURRENCY_LIST)
-        fetched_currencies = [_['base'].split('/')[-2] for _ in response.data]  # extract currency code from detail URL
+        fetched_currencies = [_['base'] for _ in response.data]  # extract currency code from detail URL
         fetched_currencies.sort()
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(self.SUPPORTED_CURRENCIES), len(response.data))

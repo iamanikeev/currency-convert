@@ -1,11 +1,13 @@
 from decimal import Decimal, InvalidOperation
 from django.http import Http404
+from rest_framework.decorators import list_route
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.status import HTTP_200_OK, HTTP_400_BAD_REQUEST
 from rest_framework.response import Response
+from rest_framework.renderers import JSONRenderer
 from api.serializers import CurrencySerializer, RatesSerializer, ConverterResponseSerializer
-from api.models import Currency, ConverterResponse, Rate
+from api.models import Currency, ConverterResponse, Rate, CURRENCY_CHOICES
 from api.util import update_queryset
 
 
@@ -23,6 +25,11 @@ class CurrencyViewSet(ReadOnlyModelViewSet):
         """
         queryset = super().get_queryset()
         return update_queryset(queryset)
+
+    @list_route()
+    def supported(self, request):
+        currencies = [_[0] for _ in CURRENCY_CHOICES]
+        return Response(currencies, status=HTTP_200_OK)
 
 
 class RateViewSet(ReadOnlyModelViewSet):

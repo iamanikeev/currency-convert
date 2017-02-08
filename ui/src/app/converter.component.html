@@ -1,0 +1,30 @@
+<div class="converter">
+  <div class="grid grid-pad">
+    <div class="col-1-10">
+      <h5>Source currency:</h5>
+      <select #v [(ngModel)]="sourceCurrency" (change)="filterTargetsCurrencies(v.value)">
+        <option *ngFor="let currency of supportedSources"
+                [value]="currency">
+          {{currency}}
+        </option>
+      </select>
+    </div>
+    <div *ngIf="sourceCurrency" class="col-1-10">
+      <h5>Target currency:</h5>
+      <select [(ngModel)]="targetCurrency">
+        <option *ngFor="let currency of supportedTargets" [value]="currency">
+          {{currency}}
+        </option>
+      </select>
+    </div>
+    <div *ngIf="targetCurrency" class="col-1-10">
+      <h5>Amount:</h5>
+      <input #amnt [(ngModel)]="amount" >
+      <button class="side" (click)="convert(amnt.value);">Convert</button>
+    </div>
+    <div *ngIf="targetCurrency" class="col-1-10">
+      <h5>Result:</h5>
+      <input [(ngModel)]="result">
+    </div>
+  </div>
+</div>
